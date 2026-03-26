@@ -3,6 +3,9 @@ import { Play, TrendingUp, Eye } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Video, formatViewCount } from "@/lib/mock-data";
+import heroBg from "@/assets/hero-bg.jpg";
+import { Button } from "@/components/ui/button";
+import { Video, formatViewCount } from "@/lib/mock-data";
 
 interface HeroSectionProps {
   video: Video;
