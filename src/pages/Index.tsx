@@ -1,16 +1,73 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import { TrendingUp, Flame, Clock, Star, Sparkles, Eye } from "lucide-react";
+import { Layout } from "@/components/Layout";
+import { HeroSection } from "@/components/HeroSection";
+import { VideoSection } from "@/components/VideoSection";
+import { mockVideos, getFeaturedVideos, getTrendingVideos, getPopularVideos, getRecentVideos } from "@/lib/mock-data";
 
-// IMPORTANT: Fully REPLACE this with your own code
-const PlaceholderIndex = () => {
-  // PLACEHOLDER: Replace this entire return statement with the user's app.
-  // The inline background color is intentionally not part of the design system.
+const Index = () => {
+  const featured = getFeaturedVideos(mockVideos);
+  const trending = getTrendingVideos(mockVideos);
+  const popular = getPopularVideos(mockVideos);
+  const recent = getRecentVideos(mockVideos);
+  const heroVideo = featured[0] || popular[0];
+
   return (
-    <div className="flex min-h-screen items-center justify-center" style={{ backgroundColor: '#fcfbf8' }}>
-      <img data-lovable-blank-page-placeholder="REMOVE_THIS" src="/placeholder.svg" alt="Your app will live here!" />
-    </div>
+    <Layout>
+      {heroVideo && <HeroSection video={heroVideo} />}
+
+      <div className="container mx-auto px-4 space-y-12 py-12">
+        <VideoSection
+          title="Trending Now"
+          icon={<TrendingUp className="w-6 h-6 text-trending" />}
+          videos={trending.slice(0, 4)}
+          linkTo="/search?sort=trending"
+        />
+        <VideoSection
+          title="Most Popular"
+          icon={<Flame className="w-6 h-6 text-popular" />}
+          videos={popular.slice(0, 8)}
+          linkTo="/search?sort=popular"
+        />
+        <VideoSection
+          title="Recently Added"
+          icon={<Clock className="w-6 h-6 text-primary" />}
+          videos={recent.slice(0, 4)}
+          linkTo="/search?sort=newest"
+        />
+        <VideoSection
+          title="Featured Picks"
+          icon={<Star className="w-6 h-6 text-trending" />}
+          videos={featured.slice(0, 4)}
+          columns={2}
+        />
+        <VideoSection
+          title="Recommended For You"
+          icon={<Sparkles className="w-6 h-6 text-primary" />}
+          videos={[...mockVideos].sort(() => Math.random() - 0.5).slice(0, 8)}
+        />
+        <VideoSection
+          title="Top This Week"
+          icon={<Eye className="w-6 h-6 text-badge-new" />}
+          videos={popular.slice(0, 4)}
+          columns={4}
+        />
+      </div>
+
+      {/* Footer */}
+      <footer className="border-t border-border mt-16 py-12">
+        <div className="container mx-auto px-4 text-center space-y-3">
+          <div className="flex items-center justify-center gap-2">
+            <div className="w-6 h-6 rounded-md gradient-primary flex items-center justify-center">
+              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+            </div>
+            <span className="font-display font-bold text-foreground">Vault<span className="text-primary">TV</span></span>
+          </div>
+          <p className="text-sm text-muted-foreground">Premium content. Unlimited streaming.</p>
+          <p className="text-xs text-muted-foreground/50">© 2026 VaultTV. All rights reserved.</p>
+        </div>
+      </footer>
+    </Layout>
   );
 };
-
-const Index = PlaceholderIndex;
 
 export default Index;
