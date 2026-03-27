@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { Search, Menu, X, User, LogIn } from "lucide-react";
+import { Search, Menu, X, LogIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
+import { useAuth } from "@/hooks/use-auth";
 
 export function Header() {
   const [searchOpen, setSearchOpen] = useState(false);
@@ -10,6 +11,7 @@ export function Header() {
   const [searchQuery, setSearchQuery] = useState("");
   const navigate = useNavigate();
   const location = useLocation();
+  const { isAdmin } = useAuth();
 
   const navLinks = [
     { label: "Home", path: "/" },
@@ -91,9 +93,11 @@ export function Header() {
               <LogIn className="w-4 h-4 mr-1" /> Sign In
             </Button>
           </Link>
-          <Link to="/admin" className="hidden sm:block">
-            <Button variant="premium" size="sm">Admin</Button>
-          </Link>
+          {isAdmin && (
+            <Link to="/admin" className="hidden sm:block">
+              <Button variant="premium" size="sm">Admin</Button>
+            </Link>
+          )}
 
           {/* Mobile menu */}
           <Button variant="ghost" size="icon" className="md:hidden text-muted-foreground" onClick={() => setMobileMenu(!mobileMenu)}>
@@ -125,9 +129,11 @@ export function Header() {
               <Link to="/login" onClick={() => setMobileMenu(false)} className="px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary">
                 Sign In
               </Link>
-              <Link to="/admin" onClick={() => setMobileMenu(false)} className="px-3 py-2.5 rounded-lg text-sm font-medium text-primary">
-                Admin Panel
-              </Link>
+              {isAdmin && (
+                <Link to="/admin" onClick={() => setMobileMenu(false)} className="px-3 py-2.5 rounded-lg text-sm font-medium text-primary">
+                  Admin Panel
+                </Link>
+              )}
             </nav>
           </motion.div>
         )}

@@ -10,6 +10,7 @@ import LoginPage from "./pages/Login";
 import AdminPage from "./pages/Admin";
 import AdminUploadPage from "./pages/AdminUpload";
 import NotFound from "./pages/NotFound";
+import { AdminRoute } from "./components/AdminRoute";
 
 const queryClient = new QueryClient();
 
@@ -24,12 +25,12 @@ const App = () => (
           <Route path="/watch/:id" element={<WatchPage />} />
           <Route path="/search" element={<SearchPage />} />
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/admin" element={<AdminPage />} />
-          <Route path="/admin/videos" element={<AdminPage />} />
-          <Route path="/admin/upload" element={<AdminUploadPage />} />
-          <Route path="/admin/categories" element={<AdminPage />} />
-          <Route path="/admin/analytics" element={<AdminPage />} />
-          <Route path="/admin/settings" element={<AdminPage />} />
+          <Route path="/admin" element={<AdminRoute><AdminPage /></AdminRoute>} />
+          <Route path="/admin/videos" element={<AdminRoute><AdminPage /></AdminRoute>} />
+          <Route path="/admin/upload" element={<AdminRoute><AdminUploadPage /></AdminRoute>} />
+          <Route path="/admin/categories" element={<AdminRoute><AdminPage /></AdminRoute>} />
+          <Route path="/admin/analytics" element={<AdminRoute><AdminPage /></AdminRoute>} />
+          <Route path="/admin/settings" element={<AdminRoute><AdminPage /></AdminRoute>} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
