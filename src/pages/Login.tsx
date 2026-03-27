@@ -1,15 +1,82 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Mail, Lock, Eye, EyeOff, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 
 export default function LoginPage() {
+  const navigate = useNavigate();
   const [isSignup, setIsSignup] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [ageConfirmed, setAgeConfirmed] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [feedback, setFeedback] = useState<{ type: "error" | "success"; message: string } | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFeedback(null);
+
+    if (!isSupabaseConfigured || !supabase) {
+      setFeedback({
+        type: "error",
+        message: "Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your env.",
+      });
+      return;
+    }
+
+    if (!email.trim() || !password.trim()) {
+      setFeedback({ type: "error", message: "Please enter your email and password." });
+      return;
+    }
+
+    if (isSignup && !ageConfirmed) {
+      setFeedback({ type: "error", message: "Please confirm you are 18+ to create an account." });
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      if (isSignup) {
+        const { data, error } = await supabase.auth.signUp({
+          email: email.trim(),
+          password,
+          options: {
+            data: { age_confirmed: ageConfirmed },
+          },
+        });
+
+        if (error) throw error;
+
+        if (data.session) {
+          navigate("/");
+          return;
+        }
+
+        setFeedback({
+          type: "success",
+          message: "Account created. Check your email to confirm your account, then sign in.",
+        });
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        });
+
+        if (error) throw error;
+
+        navigate("/");
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Authentication failed. Please try again.";
+      setFeedback({ type: "error", message });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -59,7 +126,7 @@ export default function LoginPage() {
             </p>
           </div>
 
-          <form onSubmit={e => e.preventDefault()} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
               <label className="text-sm font-medium text-foreground">Email</label>
               <div className="relative">
@@ -104,8 +171,18 @@ export default function LoginPage() {
               </span>
             </label>
 
-            <Button variant="premium" className="w-full h-11 gap-2" disabled={!ageConfirmed}>
-              {isSignup ? "Create Account" : "Sign In"} <ArrowRight className="w-4 h-4" />
+            {feedback && (
+              <p className={`text-sm ${feedback.type === "error" ? "text-destructive" : "text-primary"}`}>
+                {feedback.message}
+              </p>
+            )}
+
+            <Button
+              variant="premium"
+              className="w-full h-11 gap-2"
+              disabled={isSubmitting || (isSignup && !ageConfirmed)}
+            >
+              {isSubmitting ? "Please wait..." : isSignup ? "Create Account" : "Sign In"} <ArrowRight className="w-4 h-4" />
             </Button>
           </form>
 
