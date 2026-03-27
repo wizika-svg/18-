@@ -1,20 +1,27 @@
-import { useState } from "react";
+import { ChangeEvent, DragEvent, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Upload as UploadIcon, Film, Image, ChevronLeft, Plus, X, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { categories } from "@/lib/mock-data";
-import { createVideo } from "@/lib/videos-service";
+import { createVideo, uploadThumbnailFile, uploadVideoFile } from "@/lib/videos-service";
 import { toast } from "@/components/ui/use-toast";
 
 export default function AdminUploadPage() {
   const queryClient = useQueryClient();
+  const videoInputRef = useRef<HTMLInputElement | null>(null);
+  const thumbnailInputRef = useRef<HTMLInputElement | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [thumbnailUrl, setThumbnailUrl] = useState("");
   const [videoUrl, setVideoUrl] = useState("");
   const [duration, setDuration] = useState("00:00");
+  const [selectedVideoFile, setSelectedVideoFile] = useState<File | null>(null);
+  const [selectedThumbnailFile, setSelectedThumbnailFile] = useState<File | null>(null);
+  const [isVideoDragActive, setIsVideoDragActive] = useState(false);
+  const [isThumbnailDragActive, setIsThumbnailDragActive] = useState(false);
+  const [isUploadingFiles, setIsUploadingFiles] = useState(false);
   const [category, setCategory] = useState("");
   const [tagInput, setTagInput] = useState("");
   const [tags, setTags] = useState<string[]>([]);
@@ -34,6 +41,8 @@ export default function AdminUploadPage() {
       setThumbnailUrl("");
       setVideoUrl("");
       setDuration("00:00");
+      setSelectedVideoFile(null);
+      setSelectedThumbnailFile(null);
       setCategory("");
       setTags([]);
       setFeatured(false);
@@ -60,29 +69,143 @@ export default function AdminUploadPage() {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const formatDuration = (seconds: number): string => {
+    const rounded = Math.max(0, Math.round(seconds));
+    const hours = Math.floor(rounded / 3600);
+    const minutes = Math.floor((rounded % 3600) / 60);
+    const secs = rounded % 60;
+
+    if (hours > 0) {
+      return `${hours}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+    }
+
+    return `${minutes}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  const extractVideoDuration = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const objectUrl = URL.createObjectURL(file);
+      const video = document.createElement("video");
+      video.preload = "metadata";
+      video.src = objectUrl;
+
+      video.onloadedmetadata = () => {
+        const nextDuration = formatDuration(video.duration);
+        URL.revokeObjectURL(objectUrl);
+        resolve(nextDuration);
+      };
+
+      video.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error("Unable to read video metadata."));
+      };
+    });
+  };
+
+  const onVideoFileSelected = async (file: File) => {
+    setSelectedVideoFile(file);
+    setVideoUrl("");
+
+    try {
+      const detectedDuration = await extractVideoDuration(file);
+      setDuration(detectedDuration);
+      toast({
+        title: "Video selected",
+        description: `Duration detected: ${detectedDuration}`,
+      });
+    } catch {
+      toast({
+        title: "Could not detect duration",
+        description: "Enter duration manually if needed.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const onThumbnailFileSelected = (file: File) => {
+    setSelectedThumbnailFile(file);
+    setThumbnailUrl("");
+  };
+
+  const handleVideoInputChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    void onVideoFileSelected(file);
+  };
+
+  const handleThumbnailInputChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    onThumbnailFileSelected(file);
+  };
+
+  const preventDefaultDrag = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
+  const handleVideoDrop = (event: DragEvent<HTMLDivElement>) => {
+    preventDefaultDrag(event);
+    setIsVideoDragActive(false);
+    const file = event.dataTransfer.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("video/")) {
+      toast({ title: "Invalid file", description: "Please drop a video file.", variant: "destructive" });
+      return;
+    }
+    void onVideoFileSelected(file);
+  };
+
+  const handleThumbnailDrop = (event: DragEvent<HTMLDivElement>) => {
+    preventDefaultDrag(event);
+    setIsThumbnailDragActive(false);
+    const file = event.dataTransfer.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Invalid file", description: "Please drop an image file.", variant: "destructive" });
+      return;
+    }
+    onThumbnailFileSelected(file);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!title.trim() || !description.trim() || !category || !videoUrl.trim()) {
+    if (!title.trim() || !description.trim() || !category || (!videoUrl.trim() && !selectedVideoFile)) {
       toast({
         title: "Missing fields",
-        description: "Title, description, category, and video URL are required.",
+        description: "Title, description, category, and video file or URL are required.",
         variant: "destructive",
       });
       return;
     }
 
-    createVideoMutation.mutate({
-      title: title.trim(),
-      description: description.trim(),
-      thumbnail_url: thumbnailUrl.trim(),
-      video_url: videoUrl.trim(),
-      category,
-      tags,
-      duration: duration.trim() || "00:00",
-      featured,
-      trending,
-    });
+    setIsUploadingFiles(true);
+
+    try {
+      const resolvedVideoUrl = selectedVideoFile ? await uploadVideoFile(selectedVideoFile) : videoUrl.trim();
+      const resolvedThumbnailUrl = selectedThumbnailFile ? await uploadThumbnailFile(selectedThumbnailFile) : thumbnailUrl.trim();
+
+      await createVideoMutation.mutateAsync({
+        title: title.trim(),
+        description: description.trim(),
+        thumbnail_url: resolvedThumbnailUrl,
+        video_url: resolvedVideoUrl,
+        category,
+        tags,
+        duration: duration.trim() || "00:00",
+        featured,
+        trending,
+      });
+    } catch (error) {
+      toast({
+        title: "Upload failed",
+        description: error instanceof Error ? error.message : "Unable to upload selected files.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploadingFiles(false);
+    }
   };
 
   return (
@@ -109,34 +232,89 @@ export default function AdminUploadPage() {
           onSubmit={handleSubmit}
           className="space-y-8"
         >
-          {/* Video URL */}
-          <div className="border-2 border-dashed border-border rounded-2xl p-8 text-center hover:border-primary/40 transition-colors group">
+          {/* Video upload / URL */}
+          <div
+            className={`border-2 border-dashed rounded-2xl p-8 text-center transition-colors group ${isVideoDragActive ? "border-primary/70 bg-primary/5" : "border-border hover:border-primary/40"}`}
+            onDragEnter={(event) => {
+              preventDefaultDrag(event);
+              setIsVideoDragActive(true);
+            }}
+            onDragOver={preventDefaultDrag}
+            onDragLeave={(event) => {
+              preventDefaultDrag(event);
+              setIsVideoDragActive(false);
+            }}
+            onDrop={handleVideoDrop}
+          >
+            <input
+              ref={videoInputRef}
+              type="file"
+              accept="video/*"
+              className="hidden"
+              onChange={handleVideoInputChange}
+            />
             <div className="flex flex-col items-center gap-4">
               <div className="w-16 h-16 rounded-2xl bg-secondary flex items-center justify-center group-hover:bg-primary/10 transition-colors">
                 <Film className="w-7 h-7 text-muted-foreground group-hover:text-primary transition-colors" />
               </div>
               <div className="w-full max-w-xl space-y-3">
-                <p className="text-sm font-medium text-foreground">Paste Video URL</p>
+                <p className="text-sm font-medium text-foreground">Drop video here or choose from your folder</p>
+                <p className="text-xs text-muted-foreground">MP4, WebM, MOV (duration is detected automatically)</p>
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <Button variant="glass" type="button" size="sm" onClick={() => videoInputRef.current?.click()}>
+                    Choose Video File
+                  </Button>
+                  {selectedVideoFile && (
+                    <span className="text-xs text-primary">{selectedVideoFile.name}</span>
+                  )}
+                </div>
                 <input
                   value={videoUrl}
                   onChange={e => setVideoUrl(e.target.value)}
-                  placeholder="https://..."
+                  placeholder="Or paste video URL (optional)"
                   className="w-full h-11 px-4 rounded-lg bg-secondary text-foreground placeholder:text-muted-foreground outline-none border border-border focus:border-primary/50 text-sm"
                 />
               </div>
             </div>
           </div>
 
-          {/* Thumbnail URL */}
-          <div className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-primary/40 transition-colors group">
+          {/* Thumbnail upload / URL */}
+          <div
+            className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors group ${isThumbnailDragActive ? "border-primary/70 bg-primary/5" : "border-border hover:border-primary/40"}`}
+            onDragEnter={(event) => {
+              preventDefaultDrag(event);
+              setIsThumbnailDragActive(true);
+            }}
+            onDragOver={preventDefaultDrag}
+            onDragLeave={(event) => {
+              preventDefaultDrag(event);
+              setIsThumbnailDragActive(false);
+            }}
+            onDrop={handleThumbnailDrop}
+          >
+            <input
+              ref={thumbnailInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleThumbnailInputChange}
+            />
             <div className="flex flex-col items-center gap-3 w-full max-w-xl mx-auto">
               <Image className="w-6 h-6 text-muted-foreground group-hover:text-primary transition-colors" />
               <div className="w-full space-y-3">
-                <p className="text-sm font-medium text-foreground">Paste Thumbnail URL</p>
+                <p className="text-sm font-medium text-foreground">Drop thumbnail here or choose an image</p>
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <Button variant="glass" type="button" size="sm" onClick={() => thumbnailInputRef.current?.click()}>
+                    Choose Thumbnail
+                  </Button>
+                  {selectedThumbnailFile && (
+                    <span className="text-xs text-primary">{selectedThumbnailFile.name}</span>
+                  )}
+                </div>
                 <input
                   value={thumbnailUrl}
                   onChange={e => setThumbnailUrl(e.target.value)}
-                  placeholder="https://..."
+                  placeholder="Or paste thumbnail URL (optional)"
                   className="w-full h-11 px-4 rounded-lg bg-secondary text-foreground placeholder:text-muted-foreground outline-none border border-border focus:border-primary/50 text-sm"
                 />
                 <p className="text-xs text-muted-foreground">Use a 16:9 image for best look</p>
@@ -150,7 +328,7 @@ export default function AdminUploadPage() {
             <input
               value={duration}
               onChange={e => setDuration(e.target.value)}
-              placeholder="12:34"
+              placeholder="Auto from file (or edit manually)"
               className="w-full h-11 px-4 rounded-lg bg-secondary text-foreground placeholder:text-muted-foreground outline-none border border-border focus:border-primary/50 text-sm"
             />
           </div>
@@ -236,8 +414,12 @@ export default function AdminUploadPage() {
 
           {/* Submit */}
           <div className="flex gap-3 pt-4">
-            <Button variant="premium" className="gap-2 flex-1" type="submit" disabled={createVideoMutation.isPending}>
-              {uploaded ? <><Check className="w-4 h-4" /> Uploaded!</> : <><UploadIcon className="w-4 h-4" /> {createVideoMutation.isPending ? "Publishing..." : "Upload Video"}</>}
+            <Button variant="premium" className="gap-2 flex-1" type="submit" disabled={createVideoMutation.isPending || isUploadingFiles}>
+              {uploaded ? (
+                <><Check className="w-4 h-4" /> Uploaded!</>
+              ) : (
+                <><UploadIcon className="w-4 h-4" /> {isUploadingFiles ? "Uploading files..." : createVideoMutation.isPending ? "Publishing..." : "Upload Video"}</>
+              )}
             </Button>
             <Link to="/admin">
               <Button variant="glass" type="button">Cancel</Button>

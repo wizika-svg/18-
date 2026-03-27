@@ -13,6 +13,9 @@ export type CreateVideoInput = {
   trending: boolean;
 };
 
+const VIDEO_BUCKET = "video-files";
+const THUMBNAIL_BUCKET = "thumbnails";
+
 type VideoRow = {
   id: string;
   title: string;
@@ -91,4 +94,42 @@ export async function createVideo(input: CreateVideoInput): Promise<Video> {
   }
 
   return normalizeRow(data as VideoRow);
+}
+
+function sanitizeFileName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+async function uploadFileToBucket(file: File, bucket: string): Promise<string> {
+  if (!supabase) {
+    throw new Error("Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
+  }
+
+  const ext = file.name.includes(".") ? file.name.split(".").pop() : undefined;
+  const baseName = sanitizeFileName(file.name.replace(/\.[^/.]+$/, "")) || "upload";
+  const fileName = `${crypto.randomUUID()}-${baseName}${ext ? `.${ext}` : ""}`;
+  const filePath = `${new Date().toISOString().slice(0, 10)}/${fileName}`;
+
+  const { error } = await supabase.storage
+    .from(bucket)
+    .upload(filePath, file, { upsert: false, contentType: file.type || undefined });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const { data } = supabase.storage.from(bucket).getPublicUrl(filePath);
+  return data.publicUrl;
+}
+
+export async function uploadVideoFile(file: File): Promise<string> {
+  return uploadFileToBucket(file, VIDEO_BUCKET);
+}
+
+export async function uploadThumbnailFile(file: File): Promise<string> {
+  return uploadFileToBucket(file, THUMBNAIL_BUCKET);
 }
