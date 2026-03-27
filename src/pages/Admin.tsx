@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { Link, useLocation } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard, Upload, Film, Tags, Settings, BarChart3, TrendingUp,
   Eye, Clock, Plus, Search, Edit, Trash2, Star, ChevronLeft, Menu, X
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { mockVideos, formatViewCount, categories } from "@/lib/mock-data";
+import { formatViewCount } from "@/lib/mock-data";
+import { fetchVideos } from "@/lib/videos-service";
 
 const adminNav = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/admin" },
@@ -21,13 +23,17 @@ export default function AdminPage() {
   const location = useLocation();
   const [mobileNav, setMobileNav] = useState(false);
   const currentPath = location.pathname;
+  const { data: videos = [] } = useQuery({
+    queryKey: ["videos"],
+    queryFn: fetchVideos,
+  });
 
-  const totalViews = mockVideos.reduce((sum, v) => sum + v.view_count, 0);
-  const trendingCount = mockVideos.filter(v => v.trending).length;
-  const featuredCount = mockVideos.filter(v => v.featured).length;
+  const totalViews = videos.reduce((sum, v) => sum + v.view_count, 0);
+  const trendingCount = videos.filter(v => v.trending).length;
+  const featuredCount = videos.filter(v => v.featured).length;
 
   const stats = [
-    { icon: Film, label: "Total Videos", value: mockVideos.length.toString(), color: "text-primary" },
+    { icon: Film, label: "Total Videos", value: videos.length.toString(), color: "text-primary" },
     { icon: Eye, label: "Total Views", value: formatViewCount(totalViews), color: "text-badge-new" },
     { icon: TrendingUp, label: "Trending", value: trendingCount.toString(), color: "text-trending" },
     { icon: Star, label: "Featured", value: featuredCount.toString(), color: "text-popular" },
@@ -164,7 +170,7 @@ export default function AdminPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {mockVideos.map(video => (
+                    {videos.map(video => (
                       <tr key={video.id} className="hover:bg-secondary/30 transition-colors">
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-3">
@@ -210,7 +216,7 @@ export default function AdminPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="p-5 rounded-xl bg-card border border-border space-y-4">
               <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Most Viewed</h3>
-              {[...mockVideos].sort((a, b) => b.view_count - a.view_count).slice(0, 5).map((v, i) => (
+              {[...videos].sort((a, b) => b.view_count - a.view_count).slice(0, 5).map((v, i) => (
                 <div key={v.id} className="flex items-center gap-3">
                   <span className="w-6 text-center text-sm font-display font-bold text-muted-foreground">#{i + 1}</span>
                   <div className="flex-1 min-w-0">
@@ -222,7 +228,7 @@ export default function AdminPage() {
             </div>
             <div className="p-5 rounded-xl bg-card border border-border space-y-4">
               <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Recent Uploads</h3>
-              {[...mockVideos].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 5).map(v => (
+              {[...videos].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 5).map(v => (
                 <div key={v.id} className="flex items-center gap-3">
                   <Clock className="w-4 h-4 text-muted-foreground shrink-0" />
                   <div className="flex-1 min-w-0">

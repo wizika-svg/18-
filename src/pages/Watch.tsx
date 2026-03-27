@@ -1,19 +1,36 @@
 import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Eye, Clock, Calendar, Heart, Bookmark, Share2, ThumbsUp, ChevronLeft, Tag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Layout } from "@/components/Layout";
 import { VideoCard } from "@/components/VideoCard";
 import { WatchNextOverlay } from "@/components/WatchNextOverlay";
-import { mockVideos, formatViewCount, getRelatedVideos, getPopularVideos } from "@/lib/mock-data";
+import { Video, formatViewCount, getRelatedVideos, getPopularVideos } from "@/lib/mock-data";
+import { fetchVideos } from "@/lib/videos-service";
 
 export default function WatchPage() {
   const { id } = useParams();
-  const video = mockVideos.find(v => v.id === id);
+  const { data: videos = [], isLoading } = useQuery({
+    queryKey: ["videos"],
+    queryFn: fetchVideos,
+  });
+
+  const video = videos.find(v => v.id === id);
   const [liked, setLiked] = useState(false);
   const [saved, setSaved] = useState(false);
   const [showWatchNext, setShowWatchNext] = useState(false);
+
+  if (isLoading) {
+    return (
+      <Layout>
+        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+          <p className="text-xl text-muted-foreground">Loading video...</p>
+        </div>
+      </Layout>
+    );
+  }
 
   if (!video) {
     return (
@@ -26,8 +43,8 @@ export default function WatchPage() {
     );
   }
 
-  const related = getRelatedVideos(video, mockVideos);
-  const popular = getPopularVideos(mockVideos).filter(v => v.id !== video.id).slice(0, 4);
+  const related = getRelatedVideos(video, videos);
+  const popular = getPopularVideos(videos).filter(v => v.id !== video.id).slice(0, 4);
 
   return (
     <Layout>
@@ -175,7 +192,7 @@ export default function WatchPage() {
   );
 }
 
-function SidebarVideoCard({ video, index }: { video: typeof mockVideos[0]; index: number }) {
+function SidebarVideoCard({ video, index }: { video: Video; index: number }) {
   const hasThumbnail = Boolean(video.thumbnail_url?.trim());
 
   return (

@@ -1,14 +1,21 @@
 import { TrendingUp, Flame, Clock, Star, Sparkles, Eye } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
 import { HeroSection } from "@/components/HeroSection";
 import { VideoSection } from "@/components/VideoSection";
-import { mockVideos, getFeaturedVideos, getTrendingVideos, getPopularVideos, getRecentVideos } from "@/lib/mock-data";
+import { getFeaturedVideos, getTrendingVideos, getPopularVideos, getRecentVideos } from "@/lib/mock-data";
+import { fetchVideos } from "@/lib/videos-service";
 
 const Index = () => {
-  const featured = getFeaturedVideos(mockVideos);
-  const trending = getTrendingVideos(mockVideos);
-  const popular = getPopularVideos(mockVideos);
-  const recent = getRecentVideos(mockVideos);
+  const { data: videos = [] } = useQuery({
+    queryKey: ["videos"],
+    queryFn: fetchVideos,
+  });
+
+  const featured = getFeaturedVideos(videos);
+  const trending = getTrendingVideos(videos);
+  const popular = getPopularVideos(videos);
+  const recent = getRecentVideos(videos);
   const heroVideo = featured[0] || popular[0];
 
   return (
@@ -43,7 +50,7 @@ const Index = () => {
         <VideoSection
           title="Recommended For You"
           icon={<Sparkles className="w-6 h-6 text-primary" />}
-          videos={[...mockVideos].sort(() => Math.random() - 0.5).slice(0, 8)}
+          videos={[...videos].sort(() => Math.random() - 0.5).slice(0, 8)}
         />
         <VideoSection
           title="Top This Week"

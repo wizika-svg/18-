@@ -1,11 +1,13 @@
 import { useState, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { Search as SearchIcon, SlidersHorizontal } from "lucide-react";
 import { motion } from "framer-motion";
 import { Layout } from "@/components/Layout";
 import { VideoCard } from "@/components/VideoCard";
 import { Button } from "@/components/ui/button";
-import { mockVideos, categories, getVideosByCategory, getPopularVideos, getTrendingVideos, getRecentVideos } from "@/lib/mock-data";
+import { categories, getVideosByCategory, getPopularVideos, getTrendingVideos, getRecentVideos } from "@/lib/mock-data";
+import { fetchVideos } from "@/lib/videos-service";
 
 export default function SearchPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -16,8 +18,13 @@ export default function SearchPage() {
   const [category, setCategory] = useState("All");
   const [sort, setSort] = useState(sortParam);
 
+  const { data: videos = [] } = useQuery({
+    queryKey: ["videos"],
+    queryFn: fetchVideos,
+  });
+
   const filteredVideos = useMemo(() => {
-    let vids = getVideosByCategory(mockVideos, category);
+    let vids = getVideosByCategory(videos, category);
 
     if (query.trim()) {
       const q = query.toLowerCase();
@@ -35,7 +42,7 @@ export default function SearchPage() {
       case "newest": return getRecentVideos(vids);
       default: return vids;
     }
-  }, [query, category, sort]);
+  }, [videos, query, category, sort]);
 
   const sortOptions = [
     { value: "popular", label: "Most Popular" },
