@@ -16,6 +16,14 @@ const Index = () => {
   const trending = getTrendingVideos(videos);
   const popular = getPopularVideos(videos);
   const recent = getRecentVideos(videos);
+  const trendingSection = trending.length ? trending : popular;
+  const popularSection = popular.length ? popular : recent;
+  const recentSection = recent.length ? recent : popular;
+  const featuredSection = featured.length ? featured : popular;
+  const recommendedSection = [...(popular.length ? popular : videos)]
+    .sort(() => Math.random() - 0.5)
+    .slice(0, 8);
+  const topWeekSection = popular.length ? popular : trendingSection;
   const heroVideo = featured[0] || popular[0];
 
   return (
@@ -26,36 +34,36 @@ const Index = () => {
         <VideoSection
           title="Trending Now"
           icon={<TrendingUp className="w-6 h-6 text-trending" />}
-          videos={trending.slice(0, 4)}
+          videos={trendingSection.slice(0, 4)}
           linkTo="/search?sort=trending"
         />
         <VideoSection
           title="Most Popular"
           icon={<Flame className="w-6 h-6 text-popular" />}
-          videos={popular.slice(0, 8)}
+          videos={popularSection.slice(0, 8)}
           linkTo="/search?sort=popular"
         />
         <VideoSection
           title="Recently Added"
           icon={<Clock className="w-6 h-6 text-primary" />}
-          videos={recent.slice(0, 4)}
+          videos={recentSection.slice(0, 4)}
           linkTo="/search?sort=newest"
         />
         <VideoSection
           title="Featured Picks"
           icon={<Star className="w-6 h-6 text-trending" />}
-          videos={featured.slice(0, 4)}
+          videos={featuredSection.slice(0, 4)}
           columns={2}
         />
         <VideoSection
           title="Recommended For You"
           icon={<Sparkles className="w-6 h-6 text-primary" />}
-          videos={[...videos].sort(() => Math.random() - 0.5).slice(0, 8)}
+          videos={recommendedSection}
         />
         <VideoSection
           title="Top This Week"
           icon={<Eye className="w-6 h-6 text-badge-new" />}
-          videos={popular.slice(0, 4)}
+          videos={topWeekSection.slice(0, 4)}
           columns={4}
         />
       </div>

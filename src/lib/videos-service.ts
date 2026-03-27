@@ -133,3 +133,35 @@ export async function uploadVideoFile(file: File): Promise<string> {
 export async function uploadThumbnailFile(file: File): Promise<string> {
   return uploadFileToBucket(file, THUMBNAIL_BUCKET);
 }
+
+export async function deleteVideo(videoId: string): Promise<void> {
+  if (!supabase) {
+    throw new Error("Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
+  }
+
+  const { error } = await supabase
+    .from("videos")
+    .delete()
+    .eq("id", videoId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+export async function deleteVideos(videoIds: string[]): Promise<void> {
+  if (!videoIds.length) return;
+
+  if (!supabase) {
+    throw new Error("Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
+  }
+
+  const { error } = await supabase
+    .from("videos")
+    .delete()
+    .in("id", videoIds);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}

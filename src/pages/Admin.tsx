@@ -1,14 +1,15 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Link, useLocation } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   LayoutDashboard, Upload, Film, Tags, Settings, BarChart3, TrendingUp,
-  Eye, Clock, Plus, Search, Edit, Trash2, Star, ChevronLeft, Menu, X
+  Eye, Clock, Plus, Trash2, Star, ChevronLeft, Menu, X
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatViewCount } from "@/lib/mock-data";
-import { fetchVideos } from "@/lib/videos-service";
+import { deleteVideo, deleteVideos, fetchVideos } from "@/lib/videos-service";
+import { toast } from "@/components/ui/use-toast";
 
 const adminNav = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/admin" },
@@ -20,13 +21,123 @@ const adminNav = [
 ];
 
 export default function AdminPage() {
+  const queryClient = useQueryClient();
   const location = useLocation();
   const [mobileNav, setMobileNav] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const currentPath = location.pathname;
-  const { data: videos = [] } = useQuery({
+  const { data: videos = [], isLoading } = useQuery({
     queryKey: ["videos"],
     queryFn: fetchVideos,
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteVideo,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["videos"] });
+      toast({
+        title: "Video deleted",
+        description: "The video has been removed.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Delete failed",
+        description: error instanceof Error ? error.message : "Unable to delete this video.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: deleteVideos,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["videos"] });
+      setSelectedIds([]);
+      toast({
+        title: "Videos deleted",
+        description: "Selected videos have been removed.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Bulk delete failed",
+        description: error instanceof Error ? error.message : "Unable to delete selected videos.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  useEffect(() => {
+    setSelectedIds((prev) => prev.filter((id) => videos.some((video) => video.id === id)));
+  }, [videos]);
+
+  const videosByCategory = useMemo(() => {
+    return videos.reduce<Record<string, typeof videos>>((acc, video) => {
+      const key = video.category || "Uncategorized";
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(video);
+      return acc;
+    }, {});
+  }, [videos]);
+
+  const sortedCategories = useMemo(
+    () => Object.entries(videosByCategory).sort((a, b) => b[1].length - a[1].length),
+    [videosByCategory],
+  );
+
+  const rankedVideos = useMemo(
+    () => [...videos].sort((a, b) => b.view_count - a.view_count),
+    [videos],
+  );
+
+  const pageTitle =
+    currentPath === "/admin/categories"
+      ? "Categories"
+      : currentPath === "/admin/analytics"
+        ? "Analytics"
+        : currentPath === "/admin/videos"
+          ? "Videos"
+          : currentPath === "/admin/settings"
+            ? "Settings"
+            : "Dashboard";
+
+  const pageDescription =
+    currentPath === "/admin/categories"
+      ? "Browse videos grouped by category"
+      : currentPath === "/admin/analytics"
+        ? "View ranking from highest views to lowest"
+        : currentPath === "/admin/videos"
+          ? "Manage your uploaded videos"
+          : currentPath === "/admin/settings"
+            ? "Account and panel settings"
+            : "Manage your content and analytics";
+
+  const handleDelete = (videoId: string, title: string) => {
+    const isConfirmed = window.confirm(`Delete "${title}"? This cannot be undone.`);
+    if (!isConfirmed) return;
+    deleteMutation.mutate(videoId);
+  };
+
+  const toggleSelectVideo = (videoId: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(videoId) ? prev.filter((id) => id !== videoId) : [...prev, videoId],
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (!videos.length) return;
+    setSelectedIds((prev) => (prev.length === videos.length ? [] : videos.map((video) => video.id)));
+  };
+
+  const handleBulkDelete = () => {
+    if (!selectedIds.length) return;
+
+    const isConfirmed = window.confirm(`Delete ${selectedIds.length} selected video(s)? This cannot be undone.`);
+    if (!isConfirmed) return;
+
+    bulkDeleteMutation.mutate(selectedIds);
+  };
 
   const totalViews = videos.reduce((sum, v) => sum + v.view_count, 0);
   const trendingCount = videos.filter(v => v.trending).length;
@@ -120,8 +231,8 @@ export default function AdminPage() {
           {/* Header */}
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl lg:text-3xl font-display font-bold text-foreground">Dashboard</h1>
-              <p className="text-sm text-muted-foreground mt-1">Manage your content and analytics</p>
+              <h1 className="text-2xl lg:text-3xl font-display font-bold text-foreground">{pageTitle}</h1>
+              <p className="text-sm text-muted-foreground mt-1">{pageDescription}</p>
             </div>
             <Link to="/admin/upload">
               <Button variant="premium" className="gap-2">
@@ -130,117 +241,251 @@ export default function AdminPage() {
             </Link>
           </motion.div>
 
-          {/* Stats grid */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {stats.map((stat, i) => (
-              <motion.div
-                key={stat.label}
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.1 }}
-                className="p-5 rounded-xl bg-card border border-border hover:border-primary/20 transition-colors"
-              >
-                <stat.icon className={`w-5 h-5 ${stat.color} mb-3`} />
-                <p className="text-2xl font-display font-bold text-foreground">{stat.value}</p>
-                <p className="text-xs text-muted-foreground mt-1">{stat.label}</p>
-              </motion.div>
-            ))}
-          </div>
-
-          {/* Recent videos table */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-display font-semibold text-foreground">All Videos</h2>
-              <div className="relative w-64">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <input placeholder="Search videos..." className="w-full h-9 pl-9 pr-3 rounded-lg bg-secondary text-sm text-foreground placeholder:text-muted-foreground outline-none border border-border focus:border-primary/50" />
-              </div>
+          {isLoading ? (
+            <div className="p-6 rounded-xl bg-card border border-border text-sm text-muted-foreground">
+              Loading videos...
             </div>
-
-            <div className="rounded-xl border border-border overflow-hidden">
+          ) : currentPath === "/admin/categories" ? (
+            <div className="space-y-5">
+              {sortedCategories.length === 0 ? (
+                <div className="p-6 rounded-xl bg-card border border-border text-sm text-muted-foreground">
+                  No videos available yet.
+                </div>
+              ) : (
+                sortedCategories.map(([categoryName, categoryVideos]) => (
+                  <div key={categoryName} className="rounded-xl border border-border overflow-hidden bg-card">
+                    <div className="px-4 py-3 border-b border-border/80 flex items-center justify-between">
+                      <h3 className="font-display font-semibold text-foreground">{categoryName}</h3>
+                      <span className="text-xs text-muted-foreground">{categoryVideos.length} video(s)</span>
+                    </div>
+                    <div className="divide-y divide-border/80">
+                      {categoryVideos.map(video => (
+                        <div key={video.id} className="px-4 py-3 flex items-center justify-between gap-4">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-foreground truncate">{video.title}</p>
+                            <p className="text-xs text-muted-foreground">{formatViewCount(video.view_count)} views • {video.duration}</p>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                            disabled={deleteMutation.isPending || bulkDeleteMutation.isPending}
+                            onClick={() => handleDelete(video.id, video.title)}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          ) : currentPath === "/admin/analytics" ? (
+            <div className="rounded-xl border border-border overflow-hidden bg-card">
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
                     <tr className="bg-secondary/50">
+                      <th className="text-left text-xs font-medium text-muted-foreground px-4 py-3">Rank</th>
                       <th className="text-left text-xs font-medium text-muted-foreground px-4 py-3">Video</th>
                       <th className="text-left text-xs font-medium text-muted-foreground px-4 py-3 hidden sm:table-cell">Category</th>
                       <th className="text-left text-xs font-medium text-muted-foreground px-4 py-3">Views</th>
-                      <th className="text-left text-xs font-medium text-muted-foreground px-4 py-3 hidden md:table-cell">Status</th>
-                      <th className="text-right text-xs font-medium text-muted-foreground px-4 py-3">Actions</th>
+                      <th className="text-left text-xs font-medium text-muted-foreground px-4 py-3 hidden md:table-cell">Uploaded</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {videos.map(video => (
+                    {rankedVideos.map((video, index) => (
                       <tr key={video.id} className="hover:bg-secondary/30 transition-colors">
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-3">
-                            <div className="w-16 h-9 rounded-md bg-gradient-to-br from-primary/20 to-purple-900/20 shrink-0" />
-                            <div className="min-w-0">
-                              <p className="text-sm font-medium text-foreground truncate max-w-[200px]">{video.title}</p>
-                              <p className="text-xs text-muted-foreground">{video.duration}</p>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 hidden sm:table-cell">
-                          <span className="text-xs text-muted-foreground">{video.category}</span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="text-sm text-foreground">{formatViewCount(video.view_count)}</span>
-                        </td>
-                        <td className="px-4 py-3 hidden md:table-cell">
-                          <div className="flex gap-1.5">
-                            {video.trending && <span className="px-2 py-0.5 rounded-full bg-trending/15 text-trending text-xs font-medium">Trending</span>}
-                            {video.featured && <span className="px-2 py-0.5 rounded-full bg-primary/15 text-primary text-xs font-medium">Featured</span>}
-                            {!video.trending && !video.featured && <span className="text-xs text-muted-foreground">Active</span>}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
-                              <Edit className="w-3.5 h-3.5" />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive">
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </Button>
-                          </div>
-                        </td>
+                        <td className="px-4 py-3 text-sm font-display font-bold text-foreground">#{index + 1}</td>
+                        <td className="px-4 py-3 text-sm text-foreground">{video.title}</td>
+                        <td className="px-4 py-3 hidden sm:table-cell text-xs text-muted-foreground">{video.category}</td>
+                        <td className="px-4 py-3 text-sm text-foreground">{formatViewCount(video.view_count)}</td>
+                        <td className="px-4 py-3 hidden md:table-cell text-xs text-muted-foreground">{new Date(video.created_at).toLocaleDateString()}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
             </div>
-          </div>
+          ) : currentPath === "/admin/settings" ? (
+            <div className="p-6 rounded-xl bg-card border border-border text-sm text-muted-foreground">
+              Settings are coming soon.
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                {stats.map((stat, i) => (
+                  <motion.div
+                    key={stat.label}
+                    initial={{ opacity: 0, y: 15 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.1 }}
+                    className="p-5 rounded-xl bg-card border border-border hover:border-primary/20 transition-colors"
+                  >
+                    <stat.icon className={`w-5 h-5 ${stat.color} mb-3`} />
+                    <p className="text-2xl font-display font-bold text-foreground">{stat.value}</p>
+                    <p className="text-xs text-muted-foreground mt-1">{stat.label}</p>
+                  </motion.div>
+                ))}
+              </div>
 
-          {/* Top performing */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="p-5 rounded-xl bg-card border border-border space-y-4">
-              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Most Viewed</h3>
-              {[...videos].sort((a, b) => b.view_count - a.view_count).slice(0, 5).map((v, i) => (
-                <div key={v.id} className="flex items-center gap-3">
-                  <span className="w-6 text-center text-sm font-display font-bold text-muted-foreground">#{i + 1}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate">{v.title}</p>
-                    <p className="text-xs text-muted-foreground">{formatViewCount(v.view_count)} views</p>
-                  </div>
+              <VideosTable
+                videos={videos}
+                isDeleting={deleteMutation.isPending || bulkDeleteMutation.isPending}
+                onDelete={handleDelete}
+                selectedIds={selectedIds}
+                onToggleSelect={toggleSelectVideo}
+                onToggleSelectAll={toggleSelectAll}
+                onBulkDelete={handleBulkDelete}
+              />
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="p-5 rounded-xl bg-card border border-border space-y-4">
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Most Viewed</h3>
+                  {rankedVideos.slice(0, 5).map((v, i) => (
+                    <div key={v.id} className="flex items-center gap-3">
+                      <span className="w-6 text-center text-sm font-display font-bold text-muted-foreground">#{i + 1}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">{v.title}</p>
+                        <p className="text-xs text-muted-foreground">{formatViewCount(v.view_count)} views</p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-            <div className="p-5 rounded-xl bg-card border border-border space-y-4">
-              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Recent Uploads</h3>
-              {[...videos].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 5).map(v => (
-                <div key={v.id} className="flex items-center gap-3">
-                  <Clock className="w-4 h-4 text-muted-foreground shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate">{v.title}</p>
-                    <p className="text-xs text-muted-foreground">{new Date(v.created_at).toLocaleDateString()}</p>
-                  </div>
+                <div className="p-5 rounded-xl bg-card border border-border space-y-4">
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Recent Uploads</h3>
+                  {[...videos].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 5).map(v => (
+                    <div key={v.id} className="flex items-center gap-3">
+                      <Clock className="w-4 h-4 text-muted-foreground shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">{v.title}</p>
+                        <p className="text-xs text-muted-foreground">{new Date(v.created_at).toLocaleDateString()}</p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </div>
+              </div>
+            </>
+          )}
         </div>
       </main>
+    </div>
+  );
+}
+
+function VideosTable({
+  videos,
+  onDelete,
+  isDeleting,
+  selectedIds,
+  onToggleSelect,
+  onToggleSelectAll,
+  onBulkDelete,
+}: {
+  videos: Awaited<ReturnType<typeof fetchVideos>>;
+  onDelete: (videoId: string, title: string) => void;
+  isDeleting: boolean;
+  selectedIds: string[];
+  onToggleSelect: (videoId: string) => void;
+  onToggleSelectAll: () => void;
+  onBulkDelete: () => void;
+}) {
+  const allSelected = videos.length > 0 && selectedIds.length === videos.length;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-display font-semibold text-foreground">All Videos</h2>
+        <Button
+          variant="glass"
+          size="sm"
+          className="gap-2"
+          disabled={!selectedIds.length || isDeleting}
+          onClick={onBulkDelete}
+        >
+          <Trash2 className="w-4 h-4" /> Delete Selected ({selectedIds.length})
+        </Button>
+      </div>
+
+      <div className="rounded-xl border border-border overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="bg-secondary/50">
+                <th className="text-left text-xs font-medium text-muted-foreground px-4 py-3 w-12">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={onToggleSelectAll}
+                    className="w-4 h-4 rounded border-border accent-primary"
+                    aria-label="Select all videos"
+                  />
+                </th>
+                <th className="text-left text-xs font-medium text-muted-foreground px-4 py-3">Video</th>
+                <th className="text-left text-xs font-medium text-muted-foreground px-4 py-3 hidden sm:table-cell">Category</th>
+                <th className="text-left text-xs font-medium text-muted-foreground px-4 py-3">Views</th>
+                <th className="text-left text-xs font-medium text-muted-foreground px-4 py-3 hidden md:table-cell">Status</th>
+                <th className="text-right text-xs font-medium text-muted-foreground px-4 py-3">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {videos.map(video => (
+                <tr key={video.id} className="hover:bg-secondary/30 transition-colors">
+                  <td className="px-4 py-3">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.includes(video.id)}
+                      onChange={() => onToggleSelect(video.id)}
+                      className="w-4 h-4 rounded border-border accent-primary"
+                      aria-label={`Select ${video.title}`}
+                    />
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-16 h-9 rounded-md bg-gradient-to-br from-primary/20 to-purple-900/20 shrink-0 overflow-hidden">
+                        {video.thumbnail_url ? (
+                          <img src={video.thumbnail_url} alt={video.title} className="w-full h-full object-cover" loading="lazy" />
+                        ) : null}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate max-w-[200px]">{video.title}</p>
+                        <p className="text-xs text-muted-foreground">{video.duration}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 hidden sm:table-cell">
+                    <span className="text-xs text-muted-foreground">{video.category}</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="text-sm text-foreground">{formatViewCount(video.view_count)}</span>
+                  </td>
+                  <td className="px-4 py-3 hidden md:table-cell">
+                    <div className="flex gap-1.5">
+                      {video.trending && <span className="px-2 py-0.5 rounded-full bg-trending/15 text-trending text-xs font-medium">Trending</span>}
+                      {video.featured && <span className="px-2 py-0.5 rounded-full bg-primary/15 text-primary text-xs font-medium">Featured</span>}
+                      {!video.trending && !video.featured && <span className="text-xs text-muted-foreground">Active</span>}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                        disabled={isDeleting}
+                        onClick={() => onDelete(video.id, video.title)}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }
