@@ -10,10 +10,12 @@ interface HeroSectionProps {
 }
 
 export function HeroSection({ video }: HeroSectionProps) {
+  const heroImage = video.thumbnail_url?.trim() ? video.thumbnail_url : heroBg;
+
   return (
     <section className="relative h-[70vh] min-h-[500px] max-h-[700px] overflow-hidden">
       {/* Background image */}
-      <img src={heroBg} alt="" className="absolute inset-0 w-full h-full object-cover" width={1920} height={1080} />
+      <img src={heroImage} alt={video.title} className="absolute inset-0 w-full h-full object-cover" width={1920} height={1080} />
       <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-purple-900/15 to-background" />
       <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
       <div className="absolute inset-0 bg-gradient-to-r from-background/90 via-transparent to-transparent" />

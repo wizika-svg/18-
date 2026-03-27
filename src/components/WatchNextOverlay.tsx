@@ -93,7 +93,16 @@ export function WatchNextOverlay({ videos, show, onDismiss }: WatchNextOverlayPr
                   {videos.slice(1, 4).map(v => (
                     <Link key={v.id} to={`/watch/${v.id}`} className="group w-28">
                       <div className="aspect-video rounded-lg bg-secondary overflow-hidden group-hover:ring-2 ring-primary/50 transition-all">
-                        <div className="w-full h-full bg-gradient-to-br from-primary/20 to-purple-900/20" />
+                        {v.thumbnail_url?.trim() ? (
+                          <img
+                            src={v.thumbnail_url}
+                            alt={v.title}
+                            className="w-full h-full object-cover"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-gradient-to-br from-primary/20 to-purple-900/20" />
+                        )}
                       </div>
                       <p className="text-xs text-muted-foreground mt-1 line-clamp-1 group-hover:text-foreground transition-colors">{v.title}</p>
                     </Link>

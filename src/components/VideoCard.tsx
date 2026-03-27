@@ -21,6 +21,7 @@ const thumbnailColors = [
 export function VideoCard({ video, index = 0, size = "default" }: VideoCardProps) {
   const colorGradient = thumbnailColors[parseInt(video.id) % thumbnailColors.length];
   const isLarge = size === "large";
+  const hasThumbnail = Boolean(video.thumbnail_url?.trim());
 
   return (
     <motion.div
@@ -30,8 +31,17 @@ export function VideoCard({ video, index = 0, size = "default" }: VideoCardProps
     >
       <Link to={`/watch/${video.id}`} className="group block">
         <div className={`relative overflow-hidden rounded-xl ${isLarge ? "aspect-[16/9]" : "aspect-video"} bg-card border border-border/30 transition-all duration-300 group-hover:border-primary/30 group-hover:shadow-xl group-hover:shadow-primary/10 group-hover:scale-[1.02]`}>
-          {/* Gradient thumbnail placeholder */}
-          <div className={`absolute inset-0 bg-gradient-to-br ${colorGradient}`} />
+          {/* Thumbnail / fallback */}
+          {hasThumbnail ? (
+            <img
+              src={video.thumbnail_url}
+              alt={video.title}
+              className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+              loading="lazy"
+            />
+          ) : (
+            <div className={`absolute inset-0 bg-gradient-to-br ${colorGradient}`} />
+          )}
           <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-transparent to-transparent" />
           
           {/* Play button overlay */}

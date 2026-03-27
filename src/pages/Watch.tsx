@@ -47,6 +47,13 @@ export default function WatchPage() {
               transition={{ duration: 0.4 }}
               className="relative aspect-video rounded-2xl overflow-hidden bg-card border border-border shadow-cinematic"
             >
+              {video.thumbnail_url?.trim() && (
+                <img
+                  src={video.thumbnail_url}
+                  alt={video.title}
+                  className="absolute inset-0 w-full h-full object-cover"
+                />
+              )}
               <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-purple-900/10 to-background flex items-center justify-center">
                 <Button
                   variant="premium"
@@ -169,6 +176,8 @@ export default function WatchPage() {
 }
 
 function SidebarVideoCard({ video, index }: { video: typeof mockVideos[0]; index: number }) {
+  const hasThumbnail = Boolean(video.thumbnail_url?.trim());
+
   return (
     <motion.div
       initial={{ opacity: 0, x: 10 }}
@@ -177,7 +186,16 @@ function SidebarVideoCard({ video, index }: { video: typeof mockVideos[0]; index
     >
       <Link to={`/watch/${video.id}`} className="group flex gap-3 p-2 rounded-lg hover:bg-secondary/50 transition-colors">
         <div className="w-36 shrink-0 aspect-video rounded-lg overflow-hidden bg-card border border-border/30 group-hover:border-primary/30 transition-colors">
-          <div className="w-full h-full bg-gradient-to-br from-primary/20 to-purple-900/20" />
+          {hasThumbnail ? (
+            <img
+              src={video.thumbnail_url}
+              alt={video.title}
+              className="w-full h-full object-cover"
+              loading="lazy"
+            />
+          ) : (
+            <div className="w-full h-full bg-gradient-to-br from-primary/20 to-purple-900/20" />
+          )}
         </div>
         <div className="flex-1 min-w-0 space-y-1">
           <h4 className="text-sm font-medium text-foreground line-clamp-2 group-hover:text-primary transition-colors">{video.title}</h4>
