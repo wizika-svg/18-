@@ -64,24 +64,23 @@ export default function WatchPage() {
               transition={{ duration: 0.4 }}
               className="relative aspect-video rounded-2xl overflow-hidden bg-card border border-border shadow-cinematic"
             >
-              {video.thumbnail_url?.trim() && (
-                <img
-                  src={video.thumbnail_url}
-                  alt={video.title}
-                  className="absolute inset-0 w-full h-full object-cover"
+              {video.video_url?.trim() ? (
+                <video
+                  className="w-full h-full object-cover"
+                  src={video.video_url}
+                  poster={video.thumbnail_url || undefined}
+                  controls
+                  playsInline
+                  onEnded={() => setShowWatchNext(true)}
                 />
+              ) : (
+                <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-purple-900/10 to-background flex items-center justify-center px-6 text-center">
+                  <div className="space-y-2">
+                    <p className="text-base font-medium text-foreground">Video source is missing</p>
+                    <p className="text-sm text-muted-foreground">Re-upload this video from the admin panel with a file or valid video URL.</p>
+                  </div>
+                </div>
               )}
-              <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-purple-900/10 to-background flex items-center justify-center">
-                <Button
-                  variant="premium"
-                  size="lg"
-                  className="gap-2 text-lg"
-                  onClick={() => setShowWatchNext(true)}
-                >
-                  <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-                  Play Video
-                </Button>
-              </div>
               <WatchNextOverlay videos={related} show={showWatchNext} onDismiss={() => setShowWatchNext(false)} />
             </motion.div>
 

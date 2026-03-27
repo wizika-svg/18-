@@ -1,4 +1,4 @@
-import { mockVideos, Video } from "@/lib/mock-data";
+import { Video } from "@/lib/mock-data";
 import { supabase } from "@/lib/supabase";
 
 export type CreateVideoInput = {
@@ -49,7 +49,7 @@ function normalizeRow(row: VideoRow): Video {
 }
 
 export async function fetchVideos(): Promise<Video[]> {
-  if (!supabase) return mockVideos;
+  if (!supabase) return [];
 
   const { data, error } = await supabase
     .from("videos")
@@ -58,7 +58,7 @@ export async function fetchVideos(): Promise<Video[]> {
 
   if (error) {
     console.error("Failed to fetch videos from Supabase:", error.message);
-    return mockVideos;
+    return [];
   }
 
   return (data as VideoRow[]).map(normalizeRow);
