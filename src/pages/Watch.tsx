@@ -1,16 +1,24 @@
-import { useState } from "react";
-import { useParams, Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
+import { useParams, Link, useNavigate } from "react-router-dom";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Eye, Clock, Calendar, Heart, Bookmark, Share2, ThumbsUp, ChevronLeft, Tag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Layout } from "@/components/Layout";
 import { VideoCard } from "@/components/VideoCard";
 import { WatchNextOverlay } from "@/components/WatchNextOverlay";
+import { VideoPlayer } from "@/components/VideoPlayer";
 import { Video, formatViewCount, getRelatedVideos, getPopularVideos } from "@/lib/mock-data";
 import { fetchVideos } from "@/lib/videos-service";
+import { useAuth } from "@/hooks/use-auth";
+import { getUserVideoActions, recordVideoView, setUserVideoAction, VideoActions } from "@/lib/engagement-service";
+import { toast } from "@/components/ui/use-toast";
 
 export default function WatchPage() {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const trackedViewKeyRef = useRef<string | null>(null);
+  const { user } = useAuth();
   const { id } = useParams();
   const { data: videos = [], isLoading } = useQuery({
     queryKey: ["videos"],
@@ -18,9 +26,87 @@ export default function WatchPage() {
   });
 
   const video = videos.find(v => v.id === id);
-  const [liked, setLiked] = useState(false);
-  const [saved, setSaved] = useState(false);
   const [showWatchNext, setShowWatchNext] = useState(false);
+
+  const actionQueryKey = ["video-actions", user?.id, video?.id];
+
+  const { data: actions = { liked: false, saved: false, favorited: false } } = useQuery({
+    queryKey: actionQueryKey,
+    queryFn: () => getUserVideoActions(user!.id, video!.id),
+    enabled: Boolean(user?.id && video?.id),
+  });
+
+  const actionMutation = useMutation({
+    mutationFn: ({ action, value }: { action: keyof VideoActions; value: boolean }) =>
+      setUserVideoAction(user!.id, video!.id, action, value),
+    onSuccess: (nextActions) => {
+      queryClient.setQueryData(actionQueryKey, nextActions);
+    },
+    onError: (error) => {
+      toast({
+        title: "Action failed",
+        description: error instanceof Error ? error.message : "Unable to save this action.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  useEffect(() => {
+    if (!video?.id) return;
+
+    const viewSlot = Math.floor(Date.now() / (30 * 60 * 1000));
+    const trackingKey = `${video.id}:${user?.id ?? "anon"}:${viewSlot}`;
+
+    if (trackedViewKeyRef.current === trackingKey) return;
+    trackedViewKeyRef.current = trackingKey;
+
+    void recordVideoView(video.id, user?.id).then((didIncrement) => {
+      if (didIncrement) {
+        void queryClient.invalidateQueries({ queryKey: ["videos"] });
+      }
+    });
+  }, [video?.id, user?.id, queryClient]);
+
+  const toggleAction = (action: keyof VideoActions, label: string) => {
+    if (!user) {
+      toast({
+        title: "Sign in required",
+        description: `Please sign in to ${label.toLowerCase()} videos.`,
+      });
+      navigate("/login", { state: { from: `/watch/${video?.id ?? ""}` } });
+      return;
+    }
+
+    const currentValue = actions[action];
+    actionMutation.mutate({ action, value: !currentValue });
+  };
+
+  const handleShare = async () => {
+    if (!video) return;
+
+    const shareUrl = `${window.location.origin}/watch/${video.id}`;
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: video.title,
+          text: video.description,
+          url: shareUrl,
+        });
+      } else {
+        await navigator.clipboard.writeText(shareUrl);
+        toast({
+          title: "Link copied",
+          description: "Video link copied to clipboard.",
+        });
+      }
+    } catch {
+      toast({
+        title: "Share cancelled",
+        description: "No link was shared.",
+      });
+    }
+  };
 
   if (isLoading) {
     return (
@@ -62,25 +148,14 @@ export default function WatchPage() {
               initial={{ opacity: 0, scale: 0.98 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.4 }}
-              className="relative aspect-video rounded-2xl overflow-hidden bg-card border border-border shadow-cinematic"
+              className="relative aspect-video rounded-2xl overflow-hidden bg-card border border-border shadow-cinematic bg-black"
             >
-              {video.video_url?.trim() ? (
-                <video
-                  className="w-full h-full object-cover"
-                  src={video.video_url}
-                  poster={video.thumbnail_url || undefined}
-                  controls
-                  playsInline
-                  onEnded={() => setShowWatchNext(true)}
-                />
-              ) : (
-                <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-purple-900/10 to-background flex items-center justify-center px-6 text-center">
-                  <div className="space-y-2">
-                    <p className="text-base font-medium text-foreground">Video source is missing</p>
-                    <p className="text-sm text-muted-foreground">Re-upload this video from the admin panel with a file or valid video URL.</p>
-                  </div>
-                </div>
-              )}
+              <VideoPlayer
+                videoUrl={video.video_url}
+                thumbnailUrl={video.thumbnail_url}
+                title={video.title}
+                onEnded={() => setShowWatchNext(true)}
+              />
               <WatchNextOverlay videos={related} show={showWatchNext} onDismiss={() => setShowWatchNext(false)} />
             </motion.div>
 
@@ -107,25 +182,33 @@ export default function WatchPage() {
               {/* Actions */}
               <div className="flex flex-wrap gap-2 py-2">
                 <Button
-                  variant={liked ? "premium" : "glass"}
+                  variant={actions.liked ? "premium" : "glass"}
                   size="sm"
-                  onClick={() => setLiked(!liked)}
+                  onClick={() => toggleAction("liked", "Like")}
+                  disabled={actionMutation.isPending}
                   className="gap-1.5"
                 >
-                  <ThumbsUp className="w-4 h-4" /> {liked ? "Liked" : "Like"}
+                  <ThumbsUp className="w-4 h-4" /> {actions.liked ? "Liked" : "Like"}
                 </Button>
                 <Button
-                  variant={saved ? "premium" : "glass"}
+                  variant={actions.saved ? "premium" : "glass"}
                   size="sm"
-                  onClick={() => setSaved(!saved)}
+                  onClick={() => toggleAction("saved", "Save")}
+                  disabled={actionMutation.isPending}
                   className="gap-1.5"
                 >
-                  <Bookmark className="w-4 h-4" /> {saved ? "Saved" : "Save"}
+                  <Bookmark className="w-4 h-4" /> {actions.saved ? "Saved" : "Save"}
                 </Button>
-                <Button variant="glass" size="sm" className="gap-1.5">
-                  <Heart className="w-4 h-4" /> Favorite
+                <Button
+                  variant={actions.favorited ? "premium" : "glass"}
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => toggleAction("favorited", "Favorite")}
+                  disabled={actionMutation.isPending}
+                >
+                  <Heart className="w-4 h-4" /> {actions.favorited ? "Favorited" : "Favorite"}
                 </Button>
-                <Button variant="glass" size="sm" className="gap-1.5">
+                <Button variant="glass" size="sm" className="gap-1.5" onClick={handleShare}>
                   <Share2 className="w-4 h-4" /> Share
                 </Button>
               </div>
