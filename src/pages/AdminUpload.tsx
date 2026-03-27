@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { categories } from "@/lib/mock-data";
 import { createVideo, uploadThumbnailFile, uploadVideoFile } from "@/lib/videos-service";
 import { toast } from "@/components/ui/use-toast";
+import { parseVideoSource } from "@/lib/video-source";
 
 export default function AdminUploadPage() {
   const queryClient = useQueryClient();
@@ -183,8 +184,30 @@ export default function AdminUploadPage() {
     setIsUploadingFiles(true);
 
     try {
-      const resolvedVideoUrl = selectedVideoFile ? await uploadVideoFile(selectedVideoFile) : videoUrl.trim();
+      const parsedSource = parseVideoSource(videoUrl.trim());
+
+      if (!selectedVideoFile && parsedSource.kind === "unknown") {
+        toast({
+          title: "Unsupported video link",
+          description: "This link is not supported. Upload a video file or use YouTube, Vimeo, Dailymotion, TikTok, or a direct .mp4/.webm URL.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const resolvedVideoUrl = selectedVideoFile
+        ? await uploadVideoFile(selectedVideoFile)
+        : parsedSource.playableUrl;
       const resolvedThumbnailUrl = selectedThumbnailFile ? await uploadThumbnailFile(selectedThumbnailFile) : thumbnailUrl.trim();
+
+      if (!resolvedVideoUrl) {
+        toast({
+          title: "Missing video source",
+          description: "Upload a video file or paste a valid video link.",
+          variant: "destructive",
+        });
+        return;
+      }
 
       await createVideoMutation.mutateAsync({
         title: title.trim(),

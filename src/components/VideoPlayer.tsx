@@ -1,3 +1,5 @@
+import { parseVideoSource } from "@/lib/video-source";
+
 interface VideoPlayerProps {
   videoUrl: string;
   thumbnailUrl?: string;
@@ -5,28 +7,9 @@ interface VideoPlayerProps {
   onEnded?: () => void;
 }
 
-function getYouTubeId(url: string): string | null {
-  const patterns = [
-    /(?:youtube\.com\/watch\?(?:.*&)?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([A-Za-z0-9_-]{11})/,
-  ];
-  for (const pattern of patterns) {
-    const match = url.match(pattern);
-    if (match) return match[1];
-  }
-  return null;
-}
-
-function getVimeoId(url: string): string | null {
-  const match = url.match(/vimeo\.com\/(?:video\/)?(\d+)/);
-  return match ? match[1] : null;
-}
-
-function isDirectVideoUrl(url: string): boolean {
-  return /\.(mp4|webm|ogg|mov|m4v|mkv|avi)(\?.*)?$/i.test(url);
-}
-
 export function VideoPlayer({ videoUrl, thumbnailUrl, title, onEnded }: VideoPlayerProps) {
-  const url = videoUrl?.trim();
+  const source = parseVideoSource(videoUrl);
+  const url = source.playableUrl?.trim();
 
   if (!url) {
     return (
@@ -39,12 +22,11 @@ export function VideoPlayer({ videoUrl, thumbnailUrl, title, onEnded }: VideoPla
     );
   }
 
-  const youtubeId = getYouTubeId(url);
-  if (youtubeId) {
+  if (["youtube", "vimeo", "dailymotion", "tiktok", "embed"].includes(source.kind)) {
     return (
       <iframe
         className="absolute inset-0 w-full h-full"
-        src={`https://www.youtube.com/embed/${youtubeId}?rel=0&modestbranding=1`}
+        src={url}
         title={title ?? "Video"}
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
         allowFullScreen
@@ -52,20 +34,7 @@ export function VideoPlayer({ videoUrl, thumbnailUrl, title, onEnded }: VideoPla
     );
   }
 
-  const vimeoId = getVimeoId(url);
-  if (vimeoId) {
-    return (
-      <iframe
-        className="absolute inset-0 w-full h-full"
-        src={`https://player.vimeo.com/video/${vimeoId}?dnt=1`}
-        title={title ?? "Video"}
-        allow="autoplay; fullscreen; picture-in-picture"
-        allowFullScreen
-      />
-    );
-  }
-
-  if (isDirectVideoUrl(url) || url.startsWith("blob:") || url.includes("supabase")) {
+  if (source.kind === "direct") {
     return (
       <video
         className="absolute inset-0 w-full h-full object-contain bg-black"
